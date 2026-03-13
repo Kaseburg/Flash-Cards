@@ -480,6 +480,7 @@
         Shuffle
       </label>
       <span class="progress-text" id="progressText">1 / 10</span>
+      <button class="btn btn-secondary" id="clearBtn" style="padding:8px 18px; font-size:13px;">Clear</button>
     </div>
 
     <!-- Placeholder -->
@@ -544,6 +545,7 @@
     const revealBtn = document.getElementById('revealBtn');
     const nextBtn = document.getElementById('nextBtn');
     const restartBtn = document.getElementById('restartBtn');
+    const clearBtn = document.getElementById('clearBtn');
 
     let cards = [];       // original order
     let order = [];       // current index order
@@ -746,6 +748,34 @@
     restartBtn.addEventListener('click', () => {
       resetOrder();
       showCard();
+    });
+
+    // Clear / reset to initial state
+    clearBtn.addEventListener('click', () => {
+      cards = [];
+      order = [];
+      currentIndex = 0;
+      answerRevealed = false;
+
+      // Reset UI to initial state
+      controls.classList.add('hidden');
+      card.classList.add('hidden');
+      navButtons.classList.add('hidden');
+      completeCard.classList.add('hidden');
+      restartButtons.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+
+      // Clear file input and name
+      fileInput.value = '';
+      fileNameEl.textContent = '';
+      fileNameEl.classList.remove('loaded');
+
+      // Clear sheets input
+      sheetsUrl.value = '';
+      sheetsError.textContent = '';
+
+      // Reset shuffle toggle
+      shuffleToggle.checked = false;
     });
 
     // Tab switching
