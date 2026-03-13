@@ -76,6 +76,45 @@
       color: #202124;
     }
 
+    .upload-methods {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+
+    .tab-btn {
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #dadce0;
+      background: #fff;
+      color: #5f6368;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: #e8f0fe;
+      color: #1a73e8;
+      border-color: #1a73e8;
+    }
+
+    .tab-btn:hover:not(.active) {
+      background: #f1f3f4;
+    }
+
+    .upload-tab {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .upload-tab.active {
+      display: flex;
+    }
+
     .file-input-wrapper {
       position: relative;
       display: inline-block;
@@ -89,6 +128,41 @@
       height: 100%;
       opacity: 0;
       cursor: pointer;
+    }
+
+    .sheets-input-group {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .sheets-input-group input[type="text"] {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid #dadce0;
+      border-radius: 24px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .sheets-input-group input[type="text"]:focus {
+      border-color: #1a73e8;
+    }
+
+    .sheets-error {
+      color: #d93025;
+      font-size: 13px;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+
+    .sheets-loading {
+      color: #1a73e8;
+      font-size: 13px;
+      margin-top: 8px;
     }
 
     .btn {
@@ -364,15 +438,34 @@
     <div class="upload-section" id="uploadSection">
       <h2>Upload Your Study Set</h2>
       <p>
-        Upload a <strong>.csv</strong> or <strong>.xlsx</strong> file with two columns:<br>
+        Use a file or a Google Sheets link with two columns:<br>
         <strong>Column 1</strong> = Questions &nbsp;&bull;&nbsp; <strong>Column 2</strong> = Answers<br>
         A header row is optional and will be automatically skipped if detected.
       </p>
-      <div class="file-input-wrapper">
-        <button class="btn btn-primary" id="uploadBtn">Choose File</button>
-        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+
+      <div class="upload-methods">
+        <button class="tab-btn active" id="tabFile" onclick="switchTab('file')">Upload File</button>
+        <button class="tab-btn" id="tabSheets" onclick="switchTab('sheets')">Google Sheets</button>
       </div>
-      <div class="file-name" id="fileName"></div>
+
+      <div class="upload-tab active" id="fileTab">
+        <div class="file-input-wrapper">
+          <button class="btn btn-primary" id="uploadBtn">Choose File</button>
+          <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+        </div>
+        <div class="file-name" id="fileName"></div>
+      </div>
+
+      <div class="upload-tab" id="sheetsTab">
+        <div class="sheets-input-group">
+          <input type="text" id="sheetsUrl" placeholder="Paste Google Sheets URL here">
+          <button class="btn btn-primary" id="sheetsBtn">Load</button>
+        </div>
+        <p style="font-size:12px; color:#5f6368; margin-top:10px;">
+          The sheet must be shared as <strong>"Anyone with the link"</strong> can view.
+        </p>
+        <div class="sheets-error" id="sheetsError"></div>
+      </div>
     </div>
 
     <!-- Controls (hidden until file loaded) -->
@@ -432,6 +525,9 @@
   <script>
     const fileInput = document.getElementById('fileInput');
     const fileNameEl = document.getElementById('fileName');
+    const sheetsUrl = document.getElementById('sheetsUrl');
+    const sheetsBtn = document.getElementById('sheetsBtn');
+    const sheetsError = document.getElementById('sheetsError');
     const controls = document.getElementById('controls');
     const placeholder = document.getElementById('placeholder');
     const card = document.getElementById('card');
@@ -652,9 +748,79 @@
       showCard();
     });
 
+    // Tab switching
+    function switchTab(tab) {
+      document.getElementById('tabFile').classList.toggle('active', tab === 'file');
+      document.getElementById('tabSheets').classList.toggle('active', tab === 'sheets');
+      document.getElementById('fileTab').classList.toggle('active', tab === 'file');
+      document.getElementById('sheetsTab').classList.toggle('active', tab === 'sheets');
+    }
+
+    // Extract Google Sheets ID from URL
+    function extractSheetId(url) {
+      const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      return match ? match[1] : null;
+    }
+
+    // Extract gid (sheet tab) from URL if present
+    function extractGid(url) {
+      const match = url.match(/[#&?]gid=(\d+)/);
+      return match ? match[1] : '0';
+    }
+
+    // Google Sheets handler
+    sheetsBtn.addEventListener('click', async () => {
+      const url = sheetsUrl.value.trim();
+      sheetsError.textContent = '';
+
+      if (!url) {
+        sheetsError.textContent = 'Please paste a Google Sheets URL.';
+        return;
+      }
+
+      const sheetId = extractSheetId(url);
+      if (!sheetId) {
+        sheetsError.textContent = 'Invalid Google Sheets URL. It should look like: docs.google.com/spreadsheets/d/...';
+        return;
+      }
+
+      const gid = extractGid(url);
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+
+      sheetsBtn.disabled = true;
+      sheetsBtn.textContent = 'Loading...';
+
+      try {
+        const response = await fetch(csvUrl);
+        if (!response.ok) {
+          throw new Error(`Could not fetch sheet (HTTP ${response.status}). Make sure the sheet is shared publicly.`);
+        }
+        const text = await response.text();
+        const rows = parseCSV(text);
+        fileNameEl.textContent = '';
+        fileNameEl.classList.remove('loaded');
+        loadData(rows);
+      } catch (err) {
+        sheetsError.textContent = err.message || 'Failed to load Google Sheet. Make sure it is shared as "Anyone with the link".';
+      } finally {
+        sheetsBtn.disabled = false;
+        sheetsBtn.textContent = 'Load';
+      }
+    });
+
+    // Allow Enter key in sheets URL input
+    sheetsUrl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        sheetsBtn.click();
+      }
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if (cards.length === 0) return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
         revealBtn.click();
